@@ -6,9 +6,9 @@ on:
       - main
       - dev
     paths:
-      - '**.mjs'
-      - 'package.json'
-      - 'package-lock.json'
+      - "**.mjs"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 jobs:
@@ -22,7 +22,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '20'
+          node-version: "20"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
 
       - name: Install dependencies
         run: npm ci
@@ -34,19 +41,31 @@ jobs:
       - name: Deploy Lambda functions
         run: |
           CHANGED="${{ steps.changed-files.outputs.all_changed_files }}"
-          
-          # workflow_dispatch로 실행 시, changed-files 값이 없을 수 있으니 전체 배포 처리
+          ENVIRONMENT_VARIABLES="Variables={FIREBASE_CREDENTIALS_BASE64=${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}}"
+
           if [[ -z "$CHANGED" ]]; then
             echo "No changed files detected. Deploying all Lambda functions (manual trigger or no changes)."
             for file in *.mjs; do
               LAMBDA_NAME=$(basename "$file" .mjs)
               ZIP_FILE="$LAMBDA_NAME.zip"
+              
+              if [[ "$LAMBDA_NAME" == "index-sns" ]]; then
+                AWS_REGION="ap-northeast-1"
+              else
+                AWS_REGION="ap-northeast-2"
+              fi
 
-              echo "Zipping $file and deploying $LAMBDA_NAME..."
+              echo "Zipping $file and deploying $LAMBDA_NAME to $AWS_REGION..."
               zip -r "$ZIP_FILE" "$file" node_modules/
               aws lambda update-function-code \
                 --function-name "$LAMBDA_NAME" \
-                --zip-file "fileb://$ZIP_FILE"
+                --zip-file "fileb://$ZIP_FILE" \
+                --region "$AWS_REGION"
+              aws lambda update-function-configuration \
+                --function-name "$LAMBDA_NAME" \
+                --handler "$LAMBDA_NAME.handler" \
+                --environment "$ENVIRONMENT_VARIABLES" \
+                --region "$AWS_REGION"
             done
             exit 0
           fi
@@ -54,17 +73,29 @@ jobs:
           IFS=$'\n'
           echo "Changed files: $CHANGED"
 
-          if [[ "$CHANGED" == *package.json* || "$CHANGED" == *package-lock.json* ]]; then
-            echo "Detected package changes. Deploying all Lambda functions."
+          if [[ "$CHANGED" == *package.json* || "$CHANGED" == *package-lock.json* || "$CHANGED" == *.github/workflows/deploy.yml* ]]; then
+            echo "Detected critical changes. Deploying all Lambda functions."
             for file in *.mjs; do
               LAMBDA_NAME=$(basename "$file" .mjs)
               ZIP_FILE="$LAMBDA_NAME.zip"
 
-              echo "Zipping $file and deploying $LAMBDA_NAME..."
+              if [[ "$LAMBDA_NAME" == "index-sns" ]]; then
+                AWS_REGION="ap-northeast-1"
+              else
+                AWS_REGION="ap-northeast-2"
+              fi
+
+              echo "Zipping $file and deploying $LAMBDA_NAME to $AWS_REGION..."
               zip -r "$ZIP_FILE" "$file" node_modules/
               aws lambda update-function-code \
                 --function-name "$LAMBDA_NAME" \
-                --zip-file "fileb://$ZIP_FILE"
+                --zip-file "fileb://$ZIP_FILE" \
+                --region "$AWS_REGION"
+              aws lambda update-function-configuration \
+                --function-name "$LAMBDA_NAME" \
+                --handler "$LAMBDA_NAME.handler" \
+                --environment "$ENVIRONMENT_VARIABLES" \
+                --region "$AWS_REGION"
             done
           else
             echo "Deploying only changed Lambda functions."
@@ -73,15 +104,23 @@ jobs:
                 LAMBDA_NAME=$(basename "$file" .mjs)
                 ZIP_FILE="$LAMBDA_NAME.zip"
 
-                echo "Zipping $file and deploying $LAMBDA_NAME..."
+                if [[ "$LAMBDA_NAME" == "index-sns" ]]; then
+                  AWS_REGION="ap-northeast-1"
+                else
+                  AWS_REGION="ap-northeast-2"
+                fi
+                
+                echo "Zipping $file and deploying $LAMBDA_NAME to $AWS_REGION..."
                 zip -r "$ZIP_FILE" "$file" node_modules/
                 aws lambda update-function-code \
                   --function-name "$LAMBDA_NAME" \
-                  --zip-file "fileb://$ZIP_FILE"
+                  --zip-file "fileb://$ZIP_FILE" \
+                  --region "$AWS_REGION"
+                aws lambda update-function-configuration \
+                  --function-name "$LAMBDA_NAME" \
+                  --handler "$LAMBDA_NAME.handler" \
+                  --environment "$ENVIRONMENT_VARIABLES" \
+                  --region "$AWS_REGION"
               fi
             done
           fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ap-northeast-2
