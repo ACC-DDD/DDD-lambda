@@ -1,0 +1,87 @@
+name: Deploy Lambda Functions
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - '**.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Find changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+
+      - name: Deploy Lambda functions
+        run: |
+          CHANGED="${{ steps.changed-files.outputs.all_changed_files }}"
+          
+          # workflow_dispatch로 실행 시, changed-files 값이 없을 수 있으니 전체 배포 처리
+          if [[ -z "$CHANGED" ]]; then
+            echo "No changed files detected. Deploying all Lambda functions (manual trigger or no changes)."
+            for file in *.mjs; do
+              LAMBDA_NAME=$(basename "$file" .mjs)
+              ZIP_FILE="$LAMBDA_NAME.zip"
+
+              echo "Zipping $file and deploying $LAMBDA_NAME..."
+              zip -r "$ZIP_FILE" "$file" node_modules/
+              aws lambda update-function-code \
+                --function-name "$LAMBDA_NAME" \
+                --zip-file "fileb://$ZIP_FILE"
+            done
+            exit 0
+          fi
+
+          IFS=$'\n'
+          echo "Changed files: $CHANGED"
+
+          if [[ "$CHANGED" == *package.json* || "$CHANGED" == *package-lock.json* ]]; then
+            echo "Detected package changes. Deploying all Lambda functions."
+            for file in *.mjs; do
+              LAMBDA_NAME=$(basename "$file" .mjs)
+              ZIP_FILE="$LAMBDA_NAME.zip"
+
+              echo "Zipping $file and deploying $LAMBDA_NAME..."
+              zip -r "$ZIP_FILE" "$file" node_modules/
+              aws lambda update-function-code \
+                --function-name "$LAMBDA_NAME" \
+                --zip-file "fileb://$ZIP_FILE"
+            done
+          else
+            echo "Deploying only changed Lambda functions."
+            for file in $CHANGED; do
+              if [[ "$file" == *.mjs ]]; then
+                LAMBDA_NAME=$(basename "$file" .mjs)
+                ZIP_FILE="$LAMBDA_NAME.zip"
+
+                echo "Zipping $file and deploying $LAMBDA_NAME..."
+                zip -r "$ZIP_FILE" "$file" node_modules/
+                aws lambda update-function-code \
+                  --function-name "$LAMBDA_NAME" \
+                  --zip-file "fileb://$ZIP_FILE"
+              fi
+            done
+          fi
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ap-northeast-2
