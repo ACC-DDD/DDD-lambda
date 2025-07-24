@@ -66,23 +66,30 @@ jobs:
             echo "Critical files changed. Deploying all."
             deploy_all=true
           fi
-
-          echo "🧩 Step 1: Lambda 코드 업데이트"
+          
+          # 모든 Lambda 함수의 코드 업데이트를 먼저 시작
+          echo "🧩 Step 1: Lambda 코드 일괄 업데이트 시작"
           for file in *.mjs; do
             LAMBDA_NAME=$(basename "$file" .mjs)
             if [[ "$deploy_all" == true || "$CHANGED" == *$file* ]]; then
               REGION=$(get_region "$LAMBDA_NAME")
               ZIP_FILE="$LAMBDA_NAME.zip"
 
-              echo "📦 Zipping and deploying $LAMBDA_NAME (region: $REGION)..."
+              echo "📦 Zipping and deploying code for $LAMBDA_NAME (region: $REGION)..."
               zip -r "$ZIP_FILE" "$file" node_modules/
 
               aws lambda update-function-code \
                 --function-name "$LAMBDA_NAME" \
                 --zip-file "fileb://$ZIP_FILE" \
                 --region "$REGION"
+            fi
+          done
 
-              # 기다리기: 업데이트 완료될 때까지
+          echo "⏳ Step 2: Lambda 코드 업데이트 대기"
+          for file in *.mjs; do
+            LAMBDA_NAME=$(basename "$file" .mjs)
+            if [[ "$deploy_all" == true || "$CHANGED" == *$file* ]]; then
+              REGION=$(get_region "$LAMBDA_NAME")
               echo "⏳ Waiting for update to finish for $LAMBDA_NAME..."
               aws lambda wait function-updated \
                 --function-name "$LAMBDA_NAME" \
@@ -90,7 +97,8 @@ jobs:
             fi
           done
 
-          echo "⚙️ Step 2: 설정 일괄 업데이트 (handler + env)"
+          # 모든 함수 설정 일괄 업데이트
+          echo "⚙️ Step 3: Lambda 설정 일괄 업데이트 시작"
           for file in *.mjs; do
             LAMBDA_NAME=$(basename "$file" .mjs)
             if [[ "$deploy_all" == true || "$CHANGED" == *$file* ]]; then
