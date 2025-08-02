@@ -45,7 +45,7 @@ const formatPhoneNumberForSns = (phoneNumber) => {
   if (digits.startsWith("01")) {
     return "+82" + digits.substring(1);
   }
-  if (digits.startsWith("82010")) {
+  if (digits.startsWith("8201")) {
     return "+" + digits;
   }
   console.warn(`Invalid phone number format: ${phoneNumber}`);
@@ -104,7 +104,7 @@ export const handler = async (event) => {
     try {
       await sns.publish({
         Message: message,
-        PhoneNumber: formattedNumber, // <-- 이 부분을 수정했습니다.
+        PhoneNumber: formattedNumber,
         MessageAttributes: {
           "AWS.SNS.SMS.SMSType": {
             DataType: "String",
