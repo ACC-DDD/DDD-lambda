@@ -108,6 +108,7 @@ jobs:
                 --function-name "$LAMBDA_NAME" \
                 --handler "$LAMBDA_NAME.handler" \
                 --environment "$ENVIRONMENT_VARIABLES" \
+                --timeout 5 \
                 --region "$REGION"
             fi
           done
