@@ -46,9 +46,9 @@ jobs:
       - name: Deploy Lambda functions
         run: |
           CHANGED="${{ steps.changed-files.outputs.all_changed_files }}"
-          ENVIRONMENT_VARIABLES="Variables={FIREBASE_CREDENTIALS_BASE64=${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}}"
+          
+          ENVIRONMENT_VARIABLES="Variables={FIREBASE_CREDENTIALS_BASE64=${{ secrets.FIREBASE_CREDENTIALS_BASE64 }},TARGET_IP=${{ secrets.TARGET_IP }},TARGET_PATH=${{ secrets.TARGET_PATH }}}"
 
-          # Region 결정 함수
           get_region() {
             if [[ "$1" == "index-sns" ]]; then
               echo "ap-northeast-1"
@@ -108,6 +108,7 @@ jobs:
                 --function-name "$LAMBDA_NAME" \
                 --handler "$LAMBDA_NAME.handler" \
                 --environment "$ENVIRONMENT_VARIABLES" \
+                --timeout 5 \
                 --region "$REGION"
             fi
           done
