@@ -1,4 +1,4 @@
-import {SNS, PublishCommand} from "@aws-sdk/client-sns";
+import {SNS} from "@aws-sdk/client-sns";
 import {DynamoDBClient} from "@aws-sdk/client-dynamodb";
 import {QueryCommand, DynamoDBDocumentClient} from "@aws-sdk/lib-dynamodb";
 
@@ -11,9 +11,8 @@ const getPhoneNumbersByRegionFromDynamoDB = async (targetRegion) => {
   const tableName = "Member";
   const gsiName = "address-index";
 
-  let ExclusiveStartKey = undefined;
+  let ExclusiveStartKey = undefined; // GSI 조건 및 설정
 
-  // GSI 조건 및 설정
   do {
     const command = new QueryCommand({
       TableName: tableName,
@@ -39,6 +38,18 @@ const getPhoneNumbersByRegionFromDynamoDB = async (targetRegion) => {
     ExclusiveStartKey = result.LastEvaluatedKey;
   } while (ExclusiveStartKey);
   return phoneNumbers;
+};
+
+const formatPhoneNumberForSns = (phoneNumber) => {
+  const digits = phoneNumber.replace(/[^0-9]/g, "");
+  if (digits.startsWith("01")) {
+    return "+82" + digits.substring(1);
+  }
+  if (digits.startsWith("82010")) {
+    return "+" + digits;
+  }
+  console.warn(`Invalid phone number format: ${phoneNumber}`);
+  return null;
 };
 
 export const handler = async (event) => {
@@ -84,10 +95,16 @@ export const handler = async (event) => {
   }
 
   const sendSms = async (number) => {
+    const formattedNumber = formatPhoneNumberForSns(number);
+
+    if (!formattedNumber) {
+      console.error(`❌ 유효하지 않은 전화번호 형식입니다: ${number}`);
+      return {number, error: "Invalid phone number format"};
+    }
     try {
       await sns.publish({
         Message: message,
-        PhoneNumber: number,
+        PhoneNumber: formattedNumber, // <-- 이 부분을 수정했습니다.
         MessageAttributes: {
           "AWS.SNS.SMS.SMSType": {
             DataType: "String",
@@ -95,7 +112,7 @@ export const handler = async (event) => {
           },
         },
       });
-      console.log(`${number} 전송 성공`);
+      console.log(`${formattedNumber} 전송 성공`);
       return null;
     } catch (error) {
       console.error(`❌ ${number} 전송 실패`, error.message);
