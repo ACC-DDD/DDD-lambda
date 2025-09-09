@@ -46,7 +46,7 @@ const formatPhoneNumberForSns = (phoneNumber) => {
     return "+82" + digits.substring(1);
   } else if (digits.startsWith("8201")) {
     return "+82" + digits.substring(3);
-  } else if (digits.startsWith("8210")) {
+  } else if (digits.startsWith("8210")) { 
     return "+" + digits;
   }
   console.warn(`Invalid phone number format: ${phoneNumber}`);
